@@ -1,0 +1,116 @@
+name: render
+on:
+  workflow_dispatch:
+    inputs:
+      comp:
+        description: "Composition id"
+        required: false
+        default: "NseEp"
+      ranges:
+        description: "Frame ranges, one job each, e.g. 0-2399,2400-4981 (empty = the whole composition in one job)"
+        required: false
+        default: ""
+      crf:
+        description: "H.264 quality (lower = better)"
+        required: false
+        default: "21"
+      seq:
+        description: "1 = PNG sequence (stills, probes) instead of an mp4"
+        required: false
+        default: ""
+      args:
+        description: "Extra remotion arguments"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.p.outputs.matrix }}
+    steps:
+      - id: p
+        env:
+          RANGES: ${{ inputs.ranges }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import os, json
+          parts = [p.strip() for p in os.environ["RANGES"].split(",") if p.strip()] or [""]
+          print("matrix=" + json.dumps([{"id": i, "range": p} for i, p in enumerate(parts)]))
+          PY
+
+  render:
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: System libraries for headless Chrome
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-liberation fonts-noto-core fonts-noto-color-emoji libnss3 libdbus-1-3 libatk1.0-0t64 libatk-bridge2.0-0t64 libasound2t64 libxrandr2 libxkbcommon0 libxfixes3 libxcomposite1 libxdamage1 libgbm1 libcups2t64 libpango-1.0-0 libcairo2 libxshmfence1
+      - name: Open the bundle
+        env:
+          SCENE_KEY: ${{ secrets.SCENE_KEY }}
+        run: |
+          mkdir -p work
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:SCENE_KEY -in scene.bin | tar xz -C work
+          echo "bundle opened: $(ls work | wc -l) entries"
+      - name: Install
+        working-directory: work
+        run: |
+          START=$(date +%s)
+          npm ci --no-audit --no-fund --loglevel=error > ../install.log 2>&1 || { echo "npm ci failed (log is sealed with the result)"; exit 1; }
+          echo "install seconds: $(( $(date +%s) - START ))"
+      - name: Render
+        working-directory: work
+        env:
+          COMP: ${{ inputs.comp }}
+          RANGE: ${{ matrix.range }}
+          CRF: ${{ inputs.crf }}
+          SEQ: ${{ inputs.seq }}
+          XARGS: ${{ inputs.args }}
+        run: |
+          mkdir -p ../pack
+          echo "cores: $(nproc), RAM: $(free -g | awk '/Mem:/{print $2}') GB"
+          START=$(date +%s)
+          FR=""; [ -n "$RANGE" ] && FR="--frames=$RANGE"
+          set +e
+          if [ -n "$SEQ" ]; then
+            npx remotion render src/nse-entry.ts "$COMP" ../pack/frames --sequence --image-format=png $FR --concurrency=$(nproc) $XARGS > ../render.log 2>&1
+          else
+            npx remotion render src/nse-entry.ts "$COMP" ../pack/chunk.mp4 --muted --crf="$CRF" $FR --concurrency=$(nproc) $XARGS > ../render.log 2>&1
+          fi
+          RC=$?
+          set -e
+          echo "render seconds: $(( $(date +%s) - START )), exit code $RC"
+          exit $RC
+      - name: Seal the results
+        if: always()
+        env:
+          SCENE_KEY: ${{ secrets.SCENE_KEY }}
+          ID: ${{ matrix.id }}
+          RANGE: ${{ matrix.range }}
+        run: |
+          mkdir -p out pack
+          cp render.log install.log pack/ 2>/dev/null || true
+          printf 'id=%s\nrange=%s\n' "$ID" "${RANGE:-all}" > pack/meta.txt
+          tar cf - -C pack . | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -pass env:SCENE_KEY -out "out/sealed-$ID.enc"
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sealed-${{ matrix.id }}
+          path: out
+          retention-days: 2
+          compression-level: 0
