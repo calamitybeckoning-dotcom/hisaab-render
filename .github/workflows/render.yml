@@ -87,9 +87,9 @@ jobs:
           FR=""; [ -n "$RANGE" ] && FR="--frames=$RANGE"
           set +e
           if [ -n "$SEQ" ]; then
-            npx remotion render src/nse-entry.ts "$COMP" ../pack/frames --sequence --image-format=png $FR --concurrency=$(nproc) $XARGS > ../render.log 2>&1
+            npx remotion render src/nse-entry.ts "$COMP" "$GITHUB_WORKSPACE/pack/frames" --sequence --image-format=png $FR --concurrency=$(nproc) $XARGS > ../render.log 2>&1
           else
-            npx remotion render src/nse-entry.ts "$COMP" ../pack/chunk.mp4 --muted --crf="$CRF" $FR --concurrency=$(nproc) $XARGS > ../render.log 2>&1
+            npx remotion render src/nse-entry.ts "$COMP" "$GITHUB_WORKSPACE/pack/chunk.mp4" --muted --crf="$CRF" $FR --concurrency=$(nproc) $XARGS > ../render.log 2>&1
           fi
           RC=$?
           set -e
