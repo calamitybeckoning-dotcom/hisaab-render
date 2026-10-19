@@ -19,9 +19,13 @@ on:
         required: false
         default: "21"
       seq:
-        description: "1 = PNG sequence (stills, probes) instead of an mp4"
+        description: "1 = image sequence (stills, probes) instead of an mp4"
         required: false
         default: ""
+      imgfmt:
+        description: "image format of a sequence: png or jpeg (probes download 10x faster as jpeg)"
+        required: false
+        default: "png"
       args:
         description: "Extra remotion arguments"
         required: false
@@ -84,6 +88,7 @@ jobs:
           RANGE: ${{ matrix.range }}
           CRF: ${{ inputs.crf }}
           SEQ: ${{ inputs.seq }}
+          IMGFMT: ${{ inputs.imgfmt }}
           XARGS: ${{ inputs.args }}
         run: |
           mkdir -p ../pack
@@ -92,7 +97,7 @@ jobs:
           FR=""; [ -n "$RANGE" ] && FR="--frames=$RANGE"
           set +e
           if [ -n "$SEQ" ]; then
-            npx remotion render "$ENTRY" "$COMP" "$GITHUB_WORKSPACE/pack/frames" --sequence --image-format=png $FR --concurrency=$(nproc) $XARGS > ../render.log 2>&1
+            npx remotion render "$ENTRY" "$COMP" "$GITHUB_WORKSPACE/pack/frames" --sequence --image-format="${IMGFMT:-png}" --jpeg-quality=88 $FR --concurrency=$(nproc) $XARGS > ../render.log 2>&1
           else
             npx remotion render "$ENTRY" "$COMP" "$GITHUB_WORKSPACE/pack/chunk.mp4" --muted --crf="$CRF" $FR --concurrency=$(nproc) $XARGS > ../render.log 2>&1
           fi
