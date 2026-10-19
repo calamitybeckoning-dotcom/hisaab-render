@@ -6,6 +6,10 @@ on:
         description: "Composition id"
         required: false
         default: "NseEp"
+      entry:
+        description: "Remotion entry file (lean entry of the film)"
+        required: false
+        default: "src/nse-entry.ts"
       ranges:
         description: "Frame ranges, one job each, e.g. 0-2399,2400-4981 (empty = the whole composition in one job)"
         required: false
@@ -76,6 +80,7 @@ jobs:
         working-directory: work
         env:
           COMP: ${{ inputs.comp }}
+          ENTRY: ${{ inputs.entry }}
           RANGE: ${{ matrix.range }}
           CRF: ${{ inputs.crf }}
           SEQ: ${{ inputs.seq }}
@@ -87,9 +92,9 @@ jobs:
           FR=""; [ -n "$RANGE" ] && FR="--frames=$RANGE"
           set +e
           if [ -n "$SEQ" ]; then
-            npx remotion render src/nse-entry.ts "$COMP" "$GITHUB_WORKSPACE/pack/frames" --sequence --image-format=png $FR --concurrency=$(nproc) $XARGS > ../render.log 2>&1
+            npx remotion render "$ENTRY" "$COMP" "$GITHUB_WORKSPACE/pack/frames" --sequence --image-format=png $FR --concurrency=$(nproc) $XARGS > ../render.log 2>&1
           else
-            npx remotion render src/nse-entry.ts "$COMP" "$GITHUB_WORKSPACE/pack/chunk.mp4" --muted --crf="$CRF" $FR --concurrency=$(nproc) $XARGS > ../render.log 2>&1
+            npx remotion render "$ENTRY" "$COMP" "$GITHUB_WORKSPACE/pack/chunk.mp4" --muted --crf="$CRF" $FR --concurrency=$(nproc) $XARGS > ../render.log 2>&1
           fi
           RC=$?
           set -e
