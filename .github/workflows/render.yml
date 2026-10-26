@@ -64,9 +64,16 @@ jobs:
         with:
           node-version: 22
       - name: System libraries for headless Chrome
+        timeout-minutes: 20
         run: |
-          sudo apt-get update -y
-          sudo apt-get install -y --no-install-recommends ffmpeg fonts-liberation fonts-noto-core fonts-noto-color-emoji libnss3 libdbus-1-3 libatk1.0-0t64 libatk-bridge2.0-0t64 libasound2t64 libxrandr2 libxkbcommon0 libxfixes3 libxcomposite1 libxdamage1 libgbm1 libcups2t64 libpango-1.0-0 libcairo2 libxshmfence1
+          PKGS="ffmpeg fonts-liberation fonts-noto-core fonts-noto-color-emoji libnss3 libdbus-1-3 libatk1.0-0t64 libatk-bridge2.0-0t64 libasound2t64 libxrandr2 libxkbcommon0 libxfixes3 libxcomposite1 libxdamage1 libgbm1 libcups2t64 libpango-1.0-0 libcairo2 libxshmfence1"
+          # the runner's apt sometimes hangs for 30+ minutes on a mirror or a lock: every try is time-boxed and repeated
+          OPT="-o DPkg::Lock::Timeout=60 -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          for i in 1 2 3; do
+            if timeout 150 sudo apt-get $OPT update -y && timeout 360 sudo apt-get $OPT install -y --no-install-recommends $PKGS; then echo "apt ok on try $i"; break; fi
+            echo "apt try $i failed or timed out"; sudo pkill -9 -x apt-get || true; sudo pkill -9 -x dpkg || true; sudo dpkg --configure -a || true; sleep 5
+            [ "$i" = 3 ] && exit 1
+          done
       - name: Open the bundle
         env:
           SCENE_KEY: ${{ secrets.SCENE_KEY }}
