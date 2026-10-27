@@ -63,7 +63,7 @@ jobs:
               t0 = time.time()
               img = np.asarray(Image.open(f"in/{j['id']}.png").convert("RGB"))
               s = Settings(mode=j.get("mode", "d"), duration=float(j["duration"]), width=1280, height=720, fps=30,
-                           draw_percent=80, ink_percent=45, device="cpu", encoder="cpu")
+                           draw_percent=float(j.get('draw', 80)), ink_percent=45, device="cpu", encoder="cpu")
               path, rep = render_video(img, s, output_dir="work")
               shutil.copy(path, f"out/{j['id']}.mp4")
               print(j["id"], j["duration"], "s ->", round(time.time() - t0, 1), "s wall", flush=True)
