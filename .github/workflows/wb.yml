@@ -20,15 +20,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: FFmpeg
-        timeout-minutes: 12
+      - name: FFmpeg (static build from PyPI; the apt mirror was too slow)
+        timeout-minutes: 10
         run: |
-          OPT="-o DPkg::Lock::Timeout=60 -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
-          for i in 1 2 3; do
-            if timeout 150 sudo apt-get $OPT update -y && timeout 240 sudo apt-get $OPT install -y --no-install-recommends ffmpeg; then echo "apt ok on try $i"; break; fi
-            echo "apt try $i failed or timed out"; sudo pkill -9 -x apt-get || true; sudo pkill -9 -x dpkg || true; sudo dpkg --configure -a || true; sleep 5
-            [ "$i" = 3 ] && exit 1
-          done
+          python -m pip install --upgrade pip imageio-ffmpeg
+          FF="$(python -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')"
+          echo "FFMPEG_BINARY=$FF" >> "$GITHUB_ENV"
+          "$FF" -hide_banner -encoders 2>/dev/null | grep -E "libx264 " || { echo "no libx264"; exit 1; }
       - name: Upstream tool (pinned)
         run: |
           git clone https://github.com/letuandat131/whiteboard-animation-vi.git upstream
